@@ -1,64 +1,42 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
-
 using namespace std;
 using namespace cv;
-
-void onTrackbar(int, void*);
-
-struct myData {
-	Point center;
-	Mat& org;
-	Mat& target;
-};
-
 int main(void)
 {
-	Mat img = imread("images/rotateda.bmp", IMREAD_GRAYSCALE);
-	if (img.empty()) cout << "image load failed" << endl;
+	VideoCapture cap(0);
+	if (!cap.isOpened()) {
+		cerr << "Camera open failed" << endl;
+		return -1;
+	}
 
-	Mat bin;
-	threshold(img, bin, 0, 255, THRESH_BINARY_INV | THRESH_OTSU);
-
-	Mat dst_org;
-	cvtColor(img, dst_org, COLOR_GRAY2BGR);
-	Mat dst_affined = dst_org.clone();
-
-	vector<vector<Point>> contours;
-	findContours(bin, contours, RETR_LIST, CHAIN_APPROX_NONE);
-
-	RotatedRect rrct = minAreaRect(contours[1]);
-	Point2f pts[4];
-	rrct.points(pts);
-
-	Mat roi = dst_affined(Range(pts[1].y, pts[3].y), Range(pts[0].x, pts[2].x));
-	myData my_data = { rrct.center, dst_org, dst_affined};
-
-	namedWindow("dst_affined");
-	createTrackbar("angle", "dst_affined", 0, 360, onTrackbar, &my_data);
+	Mat frame;
+	int key;
+	bool normal_mode = true;
+	Mat M;
 
 	while (true) {
-		circle(dst_affined, rrct.center, 2, Scalar(0, 0, 255), -1);
-
-		imshow("roi", roi);
-		imshow("dst_affined", dst_affined);
-
-		if (waitKey(5) == 'q')
+		cap >> frame;
+		if (frame.empty()) {
+			cout << "frame load failed" << endl;
 			break;
+		}
+		if (!normal_mode) {
+			warpAffine(frame, frame, M, Size());
+		}
+		imshow("Frame", frame);
+		key = waitKey(10);
+		if (key == 'q') break;
+		else if (key == 'a' || key == 'b') {
+			normal_mode = false;
+			if (key == 'a')
+				M = Mat_<double>({ 2,3 }, { 2.0, 0,0,0,2.0,0 });
+			else
+				M = Mat_<double>({ 2,3 }, { 0.5, 0,0,0,0.5,0 });
+		}
+		else if (key == 'c')
+			normal_mode = true;;
 	}
+
 	return 0;
-}
-
-void onTrackbar(int pos, void* userdata)
-{
-	static int prev_pos = 0;
-	Mat m;
-
-	myData* my_data = (myData*)userdata;
-	if (prev_pos != pos) {
-		m = getRotationMatrix2D(my_data->center, pos, 1);
-		prev_pos = pos;
-	}
-
-	warpAffine(my_data->org, my_data->target, m, Size(), 1, 0, Scalar(255, 255, 255));
 }
